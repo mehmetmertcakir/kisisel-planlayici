@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Plus, Image as ImageIcon, CheckCircle, Circle, Trash2, BookOpen, X, PenTool, Clock, Moon, Sun, Search, Star, Droplet, Book, Activity, Tag, User, LogOut } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 // --- FİREBASE AYARLARI ---
@@ -50,9 +50,14 @@ export default function App() {
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
 
+  // Oturumu kalıcı hale getiren zorunlu giriş komutu
   const loginWithGoogle = async () => {
-    try { await signInWithPopup(auth, new GoogleAuthProvider()); } 
-    catch (err) { console.error(err); }
+    try { 
+      await setPersistence(auth, browserLocalPersistence);
+      await signInWithPopup(auth, new GoogleAuthProvider()); 
+    } catch (err) { 
+      console.error("Giriş Hatası:", err); 
+    }
   };
 
   const handleLogout = async () => {
@@ -60,16 +65,24 @@ export default function App() {
     catch (err) { console.error(err); }
   };
 
-  // İŞTE DÜZELTTİĞİMİZ KISIM BURASI
+  // Sayfa yüklendiğinde oturum kalıcılığını denetleyen kısım
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else {
-        signInAnonymously(auth).catch(console.error);
-      }
-    });
-    return () => unsubscribe();
+    let unsubscribe;
+    setPersistence(auth, browserLocalPersistence)
+      .then(() => {
+        unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+          if (currentUser) {
+            setUser(currentUser);
+          } else {
+            signInAnonymously(auth).catch(console.error);
+          }
+        });
+      })
+      .catch(console.error);
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
