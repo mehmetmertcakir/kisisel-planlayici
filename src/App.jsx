@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Plus, Image as ImageIcon, CheckCircle, Circle, Trash2, BookOpen, X, PenTool, Clock, Moon, Sun, Search, Star, Droplet, Book, Activity, Tag, User, LogOut } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 // --- FİREBASE AYARLARI ---
@@ -50,39 +50,22 @@ export default function App() {
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
 
-  // Oturumu kalıcı hale getiren zorunlu giriş komutu
   const loginWithGoogle = async () => {
-    try { 
-      await setPersistence(auth, browserLocalPersistence);
-      await signInWithPopup(auth, new GoogleAuthProvider()); 
-    } catch (err) { 
-      console.error("Giriş Hatası:", err); 
-    }
+    try { await signInWithPopup(auth, new GoogleAuthProvider()); } 
+    catch (err) { console.error("Giriş Hatası:", err); }
   };
 
   const handleLogout = async () => {
-    try { await signOut(auth); await signInAnonymously(auth); } 
+    try { await signOut(auth); setUser(null); setTasks([]); setJournals({}); } 
     catch (err) { console.error(err); }
   };
 
-  // Sayfa yüklendiğinde oturum kalıcılığını denetleyen kısım
+  // MİSAFİR GİRİŞİNİ KALDIRDIK, SADECE GOOGLE OTURUMUNU TAKİP EDİYOR
   useEffect(() => {
-    let unsubscribe;
-    setPersistence(auth, browserLocalPersistence)
-      .then(() => {
-        unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-          if (currentUser) {
-            setUser(currentUser);
-          } else {
-            signInAnonymously(auth).catch(console.error);
-          }
-        });
-      })
-      .catch(console.error);
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -169,7 +152,7 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-2">
-              {user && !user.isAnonymous ? (
+              {user ? (
                 <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1.5 rounded-xl">
                   <img src={user.photoURL} alt="Profil" className="w-6 h-6 rounded-full" />
                   <span className="text-sm font-semibold hidden sm:inline">{user.displayName?.split(' ')[0]}</span>
@@ -190,58 +173,69 @@ export default function App() {
             </div>
           </header>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <section className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm min-h-[500px] flex flex-col">
-              <h2 className="text-xl font-bold mb-4 flex gap-2 items-center"><CheckCircle className="text-indigo-500"/> Görevler</h2>
-              
-              <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                {HABIT_LIST.map(h => (
-                  <button key={h.id} onClick={() => toggleHabit(h.id)} className={`px-3 py-1.5 rounded-xl text-xs font-bold flex gap-1 items-center ${((dailyHabits[currentDateStr]||[]).includes(h.id)) ? h.activeClass : 'bg-slate-100 dark:bg-slate-700'}`}>
-                    <h.icon className="w-4 h-4"/> {h.label}
-                  </button>
-                ))}
-              </div>
+          {/* GİRİŞ YAPILMAMIŞSA ÇIKACAK UYARI EKRANI */}
+          {!user && (
+            <div className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 p-8 rounded-3xl text-center font-medium border border-indigo-100 dark:border-indigo-800 shadow-sm flex flex-col items-center gap-4">
+              <User className="w-12 h-12 opacity-50" />
+              <p className="text-lg">Görevlerini kaydetmek ve tüm cihazlarından senkronize erişmek için lütfen yukarıdan Giriş Yapın.</p>
+            </div>
+          )}
 
-              <form onSubmit={addTask} className="mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border dark:border-slate-700">
-                <div className="flex gap-2 mb-2">
-                  <input type="time" value={newTaskTime} onChange={e=>setNewTaskTime(e.target.value)} className="rounded-xl px-3 py-2 border dark:bg-slate-800 dark:border-slate-600 bg-transparent" />
-                  <input type="text" placeholder="Görev ekle..." value={newTaskText} onChange={e=>setNewTaskText(e.target.value)} className="flex-1 rounded-xl px-4 py-2 border dark:bg-slate-800 dark:border-slate-600 bg-transparent" />
+          {/* GİRİŞ YAPILMIŞSA GÖSTERİLECEK PLANLAYICI EKRANI */}
+          {user && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <section className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm min-h-[500px] flex flex-col">
+                <h2 className="text-xl font-bold mb-4 flex gap-2 items-center"><CheckCircle className="text-indigo-500"/> Görevler</h2>
+                
+                <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+                  {HABIT_LIST.map(h => (
+                    <button key={h.id} onClick={() => toggleHabit(h.id)} className={`px-3 py-1.5 rounded-xl text-xs font-bold flex gap-1 items-center ${((dailyHabits[currentDateStr]||[]).includes(h.id)) ? h.activeClass : 'bg-slate-100 dark:bg-slate-700'}`}>
+                      <h.icon className="w-4 h-4"/> {h.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex gap-2 justify-between">
-                  <div className="flex gap-2">
-                    <button type="button" onClick={()=>setNewTaskImportant(!newTaskImportant)} className={`p-2 rounded-lg ${newTaskImportant?'bg-amber-100 text-amber-600':'bg-slate-200 dark:bg-slate-700'}`}><Star className="w-4 h-4"/></button>
-                    <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
-                    <button type="button" onClick={()=>fileInputRef.current.click()} className="p-2 rounded-lg bg-slate-200 dark:bg-slate-700"><ImageIcon className="w-4 h-4"/></button>
+
+                <form onSubmit={addTask} className="mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border dark:border-slate-700">
+                  <div className="flex gap-2 mb-2">
+                    <input type="time" value={newTaskTime} onChange={e=>setNewTaskTime(e.target.value)} className="rounded-xl px-3 py-2 border dark:bg-slate-800 dark:border-slate-600 bg-transparent" />
+                    <input type="text" placeholder="Görev ekle..." value={newTaskText} onChange={e=>setNewTaskText(e.target.value)} className="flex-1 rounded-xl px-4 py-2 border dark:bg-slate-800 dark:border-slate-600 bg-transparent" />
                   </div>
-                  <button type="submit" disabled={!newTaskText} className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex gap-1 items-center disabled:opacity-50"><Plus className="w-4 h-4"/> Ekle</button>
-                </div>
-              </form>
-
-              <div className="flex-1 overflow-y-auto space-y-3">
-                {todaysTasks.map(t => (
-                  <div key={t.id} className={`flex gap-3 p-4 rounded-2xl border ${t.completed ? 'opacity-50' : ''} ${t.isImportant ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20' : 'dark:border-slate-700'}`}>
-                    <button onClick={()=>toggleTask(t.id)} className={t.completed ? 'text-green-500' : 'text-slate-400'}>{t.completed ? <CheckCircle/> : <Circle/>}</button>
-                    <div className="flex-1">
-                      <div className="flex gap-2 mb-1"><span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-2 rounded">{t.time}</span></div>
-                      <p className={t.completed ? 'line-through' : ''}>{t.text}</p>
-                      {t.image && <img src={t.image} className="mt-2 rounded-xl h-24 object-cover" alt="görev"/>}
+                  <div className="flex gap-2 justify-between">
+                    <div className="flex gap-2">
+                      <button type="button" onClick={()=>setNewTaskImportant(!newTaskImportant)} className={`p-2 rounded-lg ${newTaskImportant?'bg-amber-100 text-amber-600':'bg-slate-200 dark:bg-slate-700'}`}><Star className="w-4 h-4"/></button>
+                      <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+                      <button type="button" onClick={()=>fileInputRef.current.click()} className="p-2 rounded-lg bg-slate-200 dark:bg-slate-700"><ImageIcon className="w-4 h-4"/></button>
                     </div>
-                    <button onClick={()=>deleteTask(t.id)} className="text-red-400 hover:text-red-600"><Trash2 className="w-5 h-5"/></button>
+                    <button type="submit" disabled={!newTaskText} className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex gap-1 items-center disabled:opacity-50"><Plus className="w-4 h-4"/> Ekle</button>
                   </div>
-                ))}
-              </div>
-            </section>
+                </form>
 
-            <section className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm min-h-[500px] flex flex-col">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold flex gap-2 items-center text-rose-500"><BookOpen/> Günlük</h2>
-                <div className="flex gap-1 bg-slate-100 dark:bg-slate-700 p-1 rounded-xl">
-                  {MOODS.map(m => <button key={m.id} onClick={()=>selectMood(m.id)} className={`text-xl p-1 ${moods[currentDateStr]===m.id ? 'scale-125 bg-white dark:bg-slate-600 rounded-lg shadow-sm' : 'opacity-50'}`}>{m.emoji}</button>)}
+                <div className="flex-1 overflow-y-auto space-y-3">
+                  {todaysTasks.map(t => (
+                    <div key={t.id} className={`flex gap-3 p-4 rounded-2xl border ${t.completed ? 'opacity-50' : ''} ${t.isImportant ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20' : 'dark:border-slate-700'}`}>
+                      <button onClick={()=>toggleTask(t.id)} className={t.completed ? 'text-green-500' : 'text-slate-400'}>{t.completed ? <CheckCircle/> : <Circle/>}</button>
+                      <div className="flex-1">
+                        <div className="flex gap-2 mb-1"><span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-2 rounded">{t.time}</span></div>
+                        <p className={t.completed ? 'line-through' : ''}>{t.text}</p>
+                        {t.image && <img src={t.image} className="mt-2 rounded-xl h-24 object-cover" alt="görev"/>}
+                      </div>
+                      <button onClick={()=>deleteTask(t.id)} className="text-red-400 hover:text-red-600"><Trash2 className="w-5 h-5"/></button>
+                    </div>
+                  ))}
                 </div>
-              </div>
-              <textarea value={journals[currentDateStr]||''} onChange={handleJournalChange} placeholder="Sevgili günlük..." className="flex-1 w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl resize-none outline-none dark:text-white" />
-            </section>
-          </div>
+              </section>
+
+              <section className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm min-h-[500px] flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold flex gap-2 items-center text-rose-500"><BookOpen/> Günlük</h2>
+                  <div className="flex gap-1 bg-slate-100 dark:bg-slate-700 p-1 rounded-xl">
+                    {MOODS.map(m => <button key={m.id} onClick={()=>selectMood(m.id)} className={`text-xl p-1 ${moods[currentDateStr]===m.id ? 'scale-125 bg-white dark:bg-slate-600 rounded-lg shadow-sm' : 'opacity-50'}`}>{m.emoji}</button>)}
+                  </div>
+                </div>
+                <textarea value={journals[currentDateStr]||''} onChange={handleJournalChange} placeholder="Sevgili günlük..." className="flex-1 w-full p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl resize-none outline-none dark:text-white" />
+              </section>
+            </div>
+          )}
           
         </div>
       </div>
