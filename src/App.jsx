@@ -60,9 +60,16 @@ export default function App() {
     catch (err) { console.error(err); }
   };
 
+  // İŞTE DÜZELTTİĞİMİZ KISIM BURASI
   useEffect(() => {
-    signInAnonymously(auth).catch(console.error);
-    return onAuthStateChanged(auth, setUser);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        signInAnonymously(auth).catch(console.error);
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -128,7 +135,6 @@ export default function App() {
   };
 
   const todaysTasks = tasks.filter(t => t.dateStr === currentDateStr);
-
   return (
     <div className={darkMode ? 'dark' : ''}>
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-4 font-sans">
@@ -149,7 +155,6 @@ export default function App() {
               </button>
             </div>
             
-            {/* KAYIP GİRİŞ YAP BUTONLARI BURADA :) */}
             <div className="flex items-center gap-2">
               {user && !user.isAnonymous ? (
                 <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1.5 rounded-xl">
