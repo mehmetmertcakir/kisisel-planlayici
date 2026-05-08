@@ -26,11 +26,12 @@ const HABIT_LIST = [
   { id: 'workout', label: 'Egzersiz', icon: Activity, activeClass: 'text-orange-600 bg-orange-100 dark:bg-orange-500/30 dark:text-orange-300' }
 ];
 
-const CATEGORIES = ['Kişisel', 'İş', 'Okul', 'Ev'];
-const CATEGORY_COLORS = { 'Kişisel': 'bg-purple-100 text-purple-700', 'İş': 'bg-blue-100 text-blue-700', 'Okul': 'bg-yellow-100 text-yellow-700', 'Ev': 'bg-emerald-100 text-emerald-700' };
-
 const MOODS = [
-  { id: 'harika', emoji: '🤩', label: 'Harika' }, { id: 'iyi', emoji: '😊', label: 'İyi' }, { id: 'sakin', emoji: '😌', label: 'Sakin' }, { id: 'uzgun', emoji: '😔', label: 'Üzgün' }, { id: 'stresli', emoji: '😡', label: 'Stresli' }
+  { id: 'harika', emoji: '🤩', label: 'Harika' },
+  { id: 'iyi', emoji: '😊', label: 'İyi' },
+  { id: 'sakin', emoji: '😌', label: 'Sakin' },
+  { id: 'uzgun', emoji: '😔', label: 'Üzgün' },
+  { id: 'stresli', emoji: '😡', label: 'Stresli' }
 ];
 
 export default function App() {
@@ -44,40 +45,47 @@ export default function App() {
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskTime, setNewTaskTime] = useState('');
   const [newTaskImage, setNewTaskImage] = useState(null);
-  const [newTaskEndDate, setNewTaskEndDate] = useState('');
-  const [newTaskEndTime, setNewTaskEndTime] = useState('');
-  const [newTaskCategory, setNewTaskCategory] = useState('Kişisel');
   const [newTaskImportant, setNewTaskImportant] = useState(false);
-  
-  const [showDeadline, setShowDeadline] = useState(false);
-  const [activeTab, setActiveTab] = useState('tasks');
   const [darkMode, setDarkMode] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
 
-  const loginWithGoogle = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (err) { console.error(err); } };
-  const handleLogout = async () => { try { await signOut(auth); await signInAnonymously(auth); } catch (err) { console.error(err); } };
+  const loginWithGoogle = async () => {
+    try { await signInWithPopup(auth, new GoogleAuthProvider()); } 
+    catch (err) { console.error(err); }
+  };
 
-  useEffect(() => { signInAnonymously(auth).catch(console.error); return onAuthStateChanged(auth, setUser); }, []);
+  const handleLogout = async () => {
+    try { await signOut(auth); await signInAnonymously(auth); } 
+    catch (err) { console.error(err); }
+  };
+
+  useEffect(() => {
+    signInAnonymously(auth).catch(console.error);
+    return onAuthStateChanged(auth, setUser);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
+    
     const unsubTasks = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'tasks'), (snap) => {
       const loaded = snap.docs.map(doc => doc.data());
       loaded.sort((a, b) => (b.isImportant - a.isImportant) || (a.time || '').localeCompare(b.time || ''));
       setTasks(loaded);
     });
+
     const unsubJournals = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'journals'), (snap) => {
       const loaded = {}; snap.docs.forEach(d => loaded[d.id] = d.data().text); setJournals(loaded);
     });
+
     const unsubMoods = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'moods'), (snap) => {
       const loaded = {}; snap.docs.forEach(d => loaded[d.id] = d.data().moodId); setMoods(loaded);
     });
+
     const unsubHabits = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'habits'), (snap) => {
       const loaded = {}; snap.docs.forEach(d => loaded[d.id] = d.data().completed || []); setDailyHabits(loaded);
     });
+
     return () => { unsubTasks(); unsubJournals(); unsubMoods(); unsubHabits(); };
   }, [user]);
 
@@ -89,28 +97,30 @@ export default function App() {
     if (!newTaskText.trim() || !user) return;
     const newTask = {
       id: Date.now().toString(), dateStr: currentDateStr, time: newTaskTime || 'Tüm Gün', text: newTaskText,
-      completed: false, image: newTaskImage, endDate: newTaskEndDate || null, endTime: newTaskEndTime || null,
-      category: newTaskCategory, isImportant: newTaskImportant
+      completed: false, image: newTaskImage, isImportant: newTaskImportant
     };
     await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', newTask.id), newTask);
-    setNewTaskText(''); setNewTaskTime(''); setNewTaskEndDate(''); setNewTaskEndTime('');
-    setNewTaskImportant(false); setShowDeadline(false); setNewTaskImage(null);
+    setNewTaskText(''); setNewTaskTime(''); setNewTaskImportant(false); setNewTaskImage(null);
   };
 
   const toggleTask = async (id) => { const t = tasks.find(x => x.id === id); if (t && user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', id), { ...t, completed: !t.completed }); };
   const deleteTask = async (id) => { if (user) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', id)); };
+  
   const toggleHabit = async (id) => {
     if (!user) return;
     const current = dailyHabits[currentDateStr] || [];
     const newH = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
     await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'habits', currentDateStr), { completed: newH });
   };
+  
   const selectMood = async (moodId) => { if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'moods', currentDateStr), { moodId }); };
+  
   const handleJournalChange = (e) => {
     const text = e.target.value; setJournals(prev => ({ ...prev, [currentDateStr]: text }));
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => { if (user) await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'journals', currentDateStr), { text }); }, 1000);
   };
+  
   const handleImageUpload = (e) => {
     if (e.target.files[0]) {
       const reader = new FileReader(); reader.onloadend = () => setNewTaskImage(reader.result); reader.readAsDataURL(e.target.files[0]);
@@ -118,26 +128,47 @@ export default function App() {
   };
 
   const todaysTasks = tasks.filter(t => t.dateStr === currentDateStr);
-  const progressPercent = todaysTasks.length ? Math.round((todaysTasks.filter(t => t.completed).length / todaysTasks.length) * 100) : 0;
-  const currentHabits = dailyHabits[currentDateStr] || [];
-  const searchResultsTasks = searchQuery.trim() ? tasks.filter(t => t.text.toLowerCase().includes(searchQuery.toLowerCase())) : [];
-  const searchResultsJournals = searchQuery.trim() ? Object.entries(journals).filter(([date, text]) => text.toLowerCase().includes(searchQuery.toLowerCase())) : [];
 
-  const formatDisplayDate = (dateStr) => { if (!dateStr) return ''; const [y, m, d] = dateStr.split('-'); return `${d}.${m}.${y}`; };
   return (
     <div className={darkMode ? 'dark' : ''}>
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-4 font-sans">
         <div className="max-w-7xl mx-auto space-y-6">
           
           <header className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm p-4 flex flex-wrap items-center justify-between gap-4">
-            <h1 className="text-xl font-bold flex items-center gap-2 text-indigo-600"><BookOpen /> Günlüğüm & Planlayıcım</h1>
+            <h1 className="text-xl font-bold flex items-center gap-2 text-indigo-600">
+              <BookOpen /> Günlüğüm & Planlayıcım
+            </h1>
+            
             <div className="flex items-center gap-2">
-              <button onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate() - 1); setCurrentDate(d);}} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-xl"><ChevronLeft className="w-5 h-5"/></button>
+              <button onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate() - 1); setCurrentDate(d);}} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-xl">
+                <ChevronLeft className="w-5 h-5"/>
+              </button>
               <span className="font-semibold cursor-pointer" onClick={() => setCurrentDate(new Date())}>{displayDate}</span>
-              <button onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate() + 1); setCurrentDate(d);}} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-xl"><ChevronRight className="w-5 h-5"/></button>
+              <button onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate() + 1); setCurrentDate(d);}} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-xl">
+                <ChevronRight className="w-5 h-5"/>
+              </button>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setDarkMode(!darkMode)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-xl">{darkMode ? <Sun className="w-5 h-5 text-amber-400"/> : <Moon className="w-5 h-5"/>}</button>
+            
+            {/* KAYIP GİRİŞ YAP BUTONLARI BURADA :) */}
+            <div className="flex items-center gap-2">
+              {user && !user.isAnonymous ? (
+                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1.5 rounded-xl">
+                  <img src={user.photoURL} alt="Profil" className="w-6 h-6 rounded-full" />
+                  <span className="text-sm font-semibold hidden sm:inline">{user.displayName?.split(' ')[0]}</span>
+                  <button onClick={handleLogout} className="text-slate-500 hover:text-rose-500 p-1" title="Çıkış Yap">
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button onClick={loginWithGoogle} className="flex items-center gap-1.5 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 px-3 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-200">
+                  <User className="w-4 h-4" />
+                  <span className="hidden sm:inline">Giriş Yap</span>
+                </button>
+              )}
+              
+              <button onClick={() => setDarkMode(!darkMode)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-xl">
+                {darkMode ? <Sun className="w-5 h-5 text-amber-400"/> : <Moon className="w-5 h-5"/>}
+              </button>
             </div>
           </header>
 
@@ -155,13 +186,12 @@ export default function App() {
 
               <form onSubmit={addTask} className="mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border dark:border-slate-700">
                 <div className="flex gap-2 mb-2">
-                  <input type="time" value={newTaskTime} onChange={e=>setNewTaskTime(e.target.value)} className="rounded-xl px-3 py-2 border dark:bg-slate-800 dark:border-slate-600" />
-                  <input type="text" placeholder="Görev ekle..." value={newTaskText} onChange={e=>setNewTaskText(e.target.value)} className="flex-1 rounded-xl px-4 py-2 border dark:bg-slate-800 dark:border-slate-600" />
+                  <input type="time" value={newTaskTime} onChange={e=>setNewTaskTime(e.target.value)} className="rounded-xl px-3 py-2 border dark:bg-slate-800 dark:border-slate-600 bg-transparent" />
+                  <input type="text" placeholder="Görev ekle..." value={newTaskText} onChange={e=>setNewTaskText(e.target.value)} className="flex-1 rounded-xl px-4 py-2 border dark:bg-slate-800 dark:border-slate-600 bg-transparent" />
                 </div>
                 <div className="flex gap-2 justify-between">
                   <div className="flex gap-2">
                     <button type="button" onClick={()=>setNewTaskImportant(!newTaskImportant)} className={`p-2 rounded-lg ${newTaskImportant?'bg-amber-100 text-amber-600':'bg-slate-200 dark:bg-slate-700'}`}><Star className="w-4 h-4"/></button>
-                    <button type="button" onClick={()=>setShowDeadline(!showDeadline)} className="p-2 rounded-lg bg-slate-200 dark:bg-slate-700"><Clock className="w-4 h-4"/></button>
                     <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
                     <button type="button" onClick={()=>fileInputRef.current.click()} className="p-2 rounded-lg bg-slate-200 dark:bg-slate-700"><ImageIcon className="w-4 h-4"/></button>
                   </div>
