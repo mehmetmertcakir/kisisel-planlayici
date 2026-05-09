@@ -10,7 +10,8 @@ import {
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, signInAnonymously, signInWithCustomToken, 
-  onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup
+  onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup,
+  setPersistence, browserLocalPersistence
 } from 'firebase/auth';
 import { 
   getFirestore, collection, onSnapshot, 
@@ -99,7 +100,11 @@ export default function App() {
   const timerRef = useRef(null);
 
   const loginWithGoogle = async () => {
-    try { await signInWithPopup(auth, new GoogleAuthProvider()); } 
+    try { 
+      // Oturumu tarayıcıda kalıcı yap
+      await setPersistence(auth, browserLocalPersistence);
+      await signInWithPopup(auth, new GoogleAuthProvider()); 
+    } 
     catch (err) { console.error("Giriş Hatası:", err); }
   };
 
@@ -111,20 +116,44 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
+  // --- OTURUM KALICILIĞI VE BAŞLATMA DÜZELTİLDİ ---
   useEffect(() => {
+    let unsubscribe;
+
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
+        // 1. Tarayıcıda oturumun kalıcı olmasını zorla
+        await setPersistence(auth, browserLocalPersistence);
+
+        // 2. Firebase'in önceden var olan oturumu (Local Storage'dan) yüklemesini bekle
+        if (typeof auth.authStateReady === 'function') {
+          await auth.authStateReady();
         }
-      } catch (error) { console.error("Auth init error:", error); }
+
+        // 3. SADECE aktif bir kullanıcı YOKSA misafir/custom girişi yap
+        if (!auth.currentUser) {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+        }
+
+        // 4. Durum değişikliklerini dinlemeye başla
+        unsubscribe = onAuthStateChanged(auth, (currentUser) => { 
+          setUser(currentUser); 
+        });
+
+      } catch (error) { 
+        console.error("Auth init error:", error); 
+      }
     };
+    
     initAuth();
 
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => { setUser(currentUser); });
-    return () => unsubscribe();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -150,7 +179,6 @@ export default function App() {
 
     const unsubCustomHabits = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'customHabits'), (snap) => {
       const loaded = snap.docs.map(doc => doc.data());
-      // İsimlerine göre sırala
       loaded.sort((a, b) => a.label.localeCompare(b.label));
       setCustomHabits(loaded);
     });
