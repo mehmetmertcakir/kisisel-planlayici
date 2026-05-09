@@ -4,14 +4,13 @@ import {
   CheckCircle, Circle, Trash2, BookOpen, X, Clock, 
   Star, Droplet, Book, Activity, Tag, 
   User, LogOut, Code, Leaf, Timer, BarChart3, TrendingUp,
-  Award, CheckCircle2, Coffee, Heart, Settings2, Sparkles, Monitor
+  Award, CheckCircle2, Coffee, Heart, Sparkles, Monitor
 } from 'lucide-react';
 
 import { initializeApp } from 'firebase/app';
 import { 
-  getAuth, signInAnonymously, signInWithCustomToken, 
-  onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup,
-  setPersistence, browserLocalPersistence
+  getAuth, signInWithCustomToken, 
+  onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup
 } from 'firebase/auth';
 import { 
   getFirestore, collection, onSnapshot, 
@@ -101,8 +100,6 @@ export default function App() {
 
   const loginWithGoogle = async () => {
     try { 
-      // Oturumu tarayıcıda kalıcı yap
-      await setPersistence(auth, browserLocalPersistence);
       await signInWithPopup(auth, new GoogleAuthProvider()); 
     } 
     catch (err) { console.error("Giriş Hatası:", err); }
@@ -112,34 +109,26 @@ export default function App() {
     try { 
       await signOut(auth); 
       setUser(null); setTasks([]); setJournals({}); setCountdowns([]); setCustomHabits([]);
-      await signInAnonymously(auth);
     } catch (err) { console.error(err); }
   };
 
-  // --- OTURUM KALICILIĞI VE BAŞLATMA DÜZELTİLDİ ---
+  // --- OTURUM KALICILIĞI (KÖKTEN ÇÖZÜLDÜ) ---
   useEffect(() => {
     let unsubscribe;
 
     const initAuth = async () => {
       try {
-        // 1. Tarayıcıda oturumun kalıcı olmasını zorla
-        await setPersistence(auth, browserLocalPersistence);
-
-        // 2. Firebase'in önceden var olan oturumu (Local Storage'dan) yüklemesini bekle
+        // Firebase'in tarayıcı hafızasındaki (Local Storage) oturumu çekmesini bekle
         if (typeof auth.authStateReady === 'function') {
           await auth.authStateReady();
         }
 
-        // 3. SADECE aktif bir kullanıcı YOKSA misafir/custom girişi yap
-        if (!auth.currentUser) {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
+        // Eğer kişi Google ile giriş yapmamışsa VE bu sistem bir Canvas ortamıysa özel token kullan
+        if (!auth.currentUser && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
         }
 
-        // 4. Durum değişikliklerini dinlemeye başla
+        // Durum değişikliklerini dinle
         unsubscribe = onAuthStateChanged(auth, (currentUser) => { 
           setUser(currentUser); 
         });
