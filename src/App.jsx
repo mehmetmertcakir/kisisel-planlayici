@@ -10,7 +10,8 @@ import {
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, signInWithCustomToken, 
-  onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup
+  onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup,
+  setPersistence, browserLocalPersistence
 } from 'firebase/auth';
 import { 
   getFirestore, collection, onSnapshot, 
@@ -68,6 +69,8 @@ const MOODS = [
 export default function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [user, setUser] = useState(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true); // YÜKLEME EKRANI İÇİN YENİ STATE
+  
   const [tasks, setTasks] = useState([]);
   const [journals, setJournals] = useState({});
   const [moods, setMoods] = useState({});
@@ -100,6 +103,7 @@ export default function App() {
 
   const loginWithGoogle = async () => {
     try { 
+      await setPersistence(auth, browserLocalPersistence); // Giriş yaparken de kalıcılığı garantile
       await signInWithPopup(auth, new GoogleAuthProvider()); 
     } 
     catch (err) { console.error("Giriş Hatası:", err); }
@@ -112,29 +116,29 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
-  // --- OTURUM KALICILIĞI (KÖKTEN ÇÖZÜLDÜ) ---
+  // --- OTURUM KALICILIĞI KESİN ÇÖZÜM ---
   useEffect(() => {
     let unsubscribe;
 
     const initAuth = async () => {
       try {
-        // Firebase'in tarayıcı hafızasındaki (Local Storage) oturumu çekmesini bekle
-        if (typeof auth.authStateReady === 'function') {
-          await auth.authStateReady();
+        // 1. KURAL: Tarayıcı kapatılsa da sekme yenilense de oturumun kalıcı olmasını zorla
+        await setPersistence(auth, browserLocalPersistence);
+
+        // 2. KURAL: Canvas önizleme ortamındaysak geçici test girişi yap
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token && !auth.currentUser) {
+          try { await signInWithCustomToken(auth, __initial_auth_token); } catch(e) {}
         }
 
-        // Eğer kişi Google ile giriş yapmamışsa VE bu sistem bir Canvas ortamıysa özel token kullan
-        if (!auth.currentUser && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        }
-
-        // Durum değişikliklerini dinle
+        // 3. KURAL: Oturum durumunu dinle ve hesabı bulunca yükleme ekranını (spinner) kapat
         unsubscribe = onAuthStateChanged(auth, (currentUser) => { 
           setUser(currentUser); 
+          setIsAuthChecking(false); // Firebase veriyi okudu, artık ekranı gösterebiliriz!
         });
 
       } catch (error) { 
         console.error("Auth init error:", error); 
+        setIsAuthChecking(false);
       }
     };
     
@@ -246,6 +250,17 @@ export default function App() {
   const totalCompletedTasks = tasks.filter(t => t.completed).length;
   const completionRate = tasks.length > 0 ? Math.round((totalCompletedTasks / tasks.length) * 100) : 0;
   const currentHabits = dailyHabits[currentDateStr] || [];
+
+  // --- YÜKLEME EKRANI ---
+  // Firebase giriş bilgisini okuyana kadar bu şık bekleme ekranı gösterilir
+  if (isAuthChecking) {
+    return (
+      <div className="h-screen bg-black flex flex-col items-center justify-center text-zinc-500 gap-4 selection:bg-indigo-500/30">
+        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+        <p className="font-semibold text-sm animate-pulse tracking-wide">Oturum bilgileri kontrol ediliyor...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col font-sans bg-black text-zinc-200 selection:bg-indigo-500/30">
